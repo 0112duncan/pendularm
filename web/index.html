@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Pendularm Control Room</title><link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div><p class="eyebrow">AUTOROB · PROJECT 2</p><h1>Pendularm Control Room</h1></div>
+    <div id="connection" class="connection off">Connecting to node runtime</div>
+  </header>
+  <main class="layout">
+    <aside class="panel state-panel">
+      <p class="eyebrow">LIVE TELEMETRY</p><h2>Joint states</h2>
+      <dl class="summary"><div><dt>Simulation time</dt><dd id="sim-time">—</dd></div><div><dt>Total energy</dt><dd id="energy">Waiting…</dd></div></dl>
+      <div class="table-wrap"><table><thead><tr><th>Joint</th><th>Position</th><th>Velocity</th><th>Effort</th></tr></thead><tbody id="joint-state"><tr><td colspan="4">Waiting for /joint_states</td></tr></tbody></table></div>
+      <section class="mini-log"><h3>Service activity</h3><pre id="messages">Connecting…</pre></section>
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="visual-heading"><div><p class="eyebrow">LIVE ARM VIEW</p><h2>Planar pendularm</h2></div><span id="link-count">— links</span></div>
+      <canvas id="arm" width="1100" height="760" aria-label="Live arm visualization"></canvas>
+      <p class="caption">The orange dot is the active target (x, y); its arrow shows phi in world coordinates. The browser does not run physics, PID, IK, or energy calculations.</p>
+    </section>
+
+    <aside class="control-column">
+      <section class="panel control-card">
+        <p class="eyebrow">/arm_sim/set_integrator · /arm_sim/set_params</p><h2>Simulation parameters</h2>
+        <div class="form-grid integrator-controls"><label>Integrator <select id="integrator-method"><option value="euler">Euler</option><option value="midpoint">Midpoint</option><option value="verlet">Verlet</option><option value="rk4" selected>RK4</option></select></label><label>Timestep (s)<input id="integrator-timestep" type="number" min="0.000001" step="0.001" value="0.01"></label></div>
+        <button id="send-integrator">Apply integrator</button>
+        <h3 class="control-subheading">Physical parameters</h3>
+        <label>Gravity <input id="gravity" type="number" min="0" step="0.01" value="9.81"></label>
+        <div id="param-inputs" class="link-inputs"></div>
+        <button id="send-params" class="primary">Send parameters</button><div class="button-row sim-actions"><button id="toggle-sim">Pause simulation</button><button id="reset-sim" class="danger">Reset arm</button></div>
+      </section>
+
+      <section class="panel control-card">
+        <p class="eyebrow">/ik_action/send_goal · /ik_action/cancel_goal</p><h2>IK goal</h2>
+        <div class="form-grid"><label>X <input id="goal-x" type="number" step="0.01" value="1"></label><label>Y <input id="goal-y" type="number" step="0.01" value="0"></label><label>Phi orientation (rad) <input id="goal-phi" type="number" step="0.01" placeholder="optional"></label><label>Epsilon <input id="goal-epsilon" type="number" min="0.001" step="0.01" placeholder="optional"></label><label class="span-2">Success hold (s)<input id="goal-hold" type="number" min="0" step="0.01" placeholder="optional"></label></div>
+        <p id="goal-status" class="inline-status">No active goal</p>
+        <div class="button-row goal-actions"><button id="send-goal" class="primary">Send goal</button><button id="cancel-goal" class="danger">Cancel goal</button></div>
+      </section>
+
+      <section class="panel control-card">
+        <p class="eyebrow">/pid_controller/*</p><h2>PID controller</h2><p id="pid-state" class="inline-status">PID stopped</p>
+        <h3 class="control-subheading">Live controller terms</h3><div id="pid-live" class="pid-live">Waiting for /pid_controller/state</div>
+        <div id="gain-inputs" class="gain-inputs"></div>
+        <div class="button-row"><button id="send-gains" disabled>Set PID gains</button><button id="start-pid" class="good">Start PID</button><button id="stop-pid" class="danger">Stop PID</button></div>
+      </section>
+
+      <section class="panel control-card">
+        <p class="eyebrow">/ik_trial/*</p><h2>IK trial</h2>
+        <div class="form-grid"><label>Duration (s)<input id="trial-duration" type="number" min="0.01" step="1" value="10"></label><label>Epsilon <input id="trial-epsilon" type="number" min="0.001" step="0.01" value="0.05"></label><label class="span-2">Success hold (s)<input id="trial-hold" type="number" min="0" step="0.01" value="0.20"></label></div>
+        <p class="panel-note">Start PID before running a trial so action goals can move the arm.</p><div id="trial-status" class="status-box">Trial idle</div><div class="button-row"><button id="trial-start" class="primary">Start trial</button><button id="trial-skip">Skip goal</button><button id="trial-stop" class="danger">Stop / pause</button></div>
+      </section>
+    </aside>
+  </main>
+  <script type="module" src="app.js"></script>
+</body></html>

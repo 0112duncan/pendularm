@@ -1,0 +1,39 @@
+CXX ?= g++
+CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -Wpedantic -pthread
+CPPFLAGS ?= -Iinclude
+SHELL := /bin/bash
+
+NODE_CLIENT = src/middleware/node.cpp
+HEADERS = $(wildcard include/*.hpp)
+
+.PHONY: build run test clean
+
+build: build/autorob_hub build/integrator_step
+
+build/autorob_hub: src/hub.cpp src/rosbridge_server.cpp src/middleware/bus.cpp $(HEADERS)
+	mkdir -p build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) src/hub.cpp src/rosbridge_server.cpp \
+		src/middleware/bus.cpp -o $@
+
+build/integrator_step: src/nodes/integrator_step.cpp $(NODE_CLIENT) $(HEADERS)
+	mkdir -p build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) src/nodes/integrator_step.cpp $(NODE_CLIENT) -o $@
+
+build/demo_node: src/examples/demo_node.cpp $(NODE_CLIENT) $(HEADERS)
+	mkdir -p build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) src/examples/demo_node.cpp $(NODE_CLIENT) -o $@
+
+run: build
+	./build/autorob_hub & hub_pid=$$!; \
+	trap 'kill $$hub_pid $$node_pid 2>/dev/null; wait $$hub_pid $$node_pid 2>/dev/null' EXIT INT TERM; \
+	./build/integrator_step & node_pid=$$!; \
+	wait -n $$hub_pid $$node_pid; \
+	status=$$?; \
+	if ((status == 0)); then status=1; fi; \
+	exit $$status
+
+test: build/autorob_hub build/demo_node
+	python3 tests/test_gateway.py
+
+clean:
+	rm -rf build

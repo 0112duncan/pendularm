@@ -1,0 +1,118 @@
+#include "node.hpp"
+
+#include <chrono>
+#include <cmath>
+#include <exception>
+#include <iostream>
+#include <string>
+#include <thread>
+#include <vector>
+
+namespace {
+
+constexpr double kTolerance = 1e-9;
+int failures = 0;
+
+void expect(bool condition, const std::string& message) {
+  if (!condition) {
+    std::cerr << "FAIL: " << message << '\n';
+    ++failures;
+  }
+}
+
+bool approximately(double actual, double expected) {
+  return std::abs(actual - expected) <= kTolerance;
+}
+
+autorob::Json::Object request(const std::string& function, const std::string& method,
+                              double dt = 1.0, std::size_t steps = 2) {
+  return {{"function", function}, {"x0", 0.0}, {"xdot0", 0.0}, {"dt", dt},
+          {"steps", steps}, {"integrator", method}};
+}
+
+autorob::ServiceResult call_integration(autorob::Node& node,
+                                        const autorob::Json& arguments) {
+  autorob::ServiceResult reply{false, autorob::Json::Object{}, "service did not register"};
+  for (int attempt = 0; attempt < 100; ++attempt) {
+    reply = node.call_service("/arm_sim/integration_step", arguments);
+    if (reply.result || reply.status != "service has no provider") return reply;
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+  return reply;
+}
+
+void expect_array(const autorob::Json& values, const std::string& name,
+                  const std::vector<double>& expected) {
+  const autorob::Json* field = values.get(name);
+  expect(field && field->is_array(), name + " must be an array");
+  if (!field || !field->is_array()) return;
+  const auto& actual = field->as_array();
+  expect(actual.size() == expected.size(), name + " has the wrong length");
+  for (std::size_t i = 0; i < actual.size() && i < expected.size(); ++i) {
+    expect(actual[i].is_number() && approximately(actual[i].as_number(), expected[i]),
+           name + "[" + std::to_string(i) + " is incorrect");
+  }
+}
+
+void expect_trajectory(const autorob::ServiceResult& reply,
+                       const std::vector<double>& positions) {
+  expect(reply.result, "valid request was rejected: " + reply.status);
+  if (!reply.result) return;
+  expect_array(reply.values, "times", {0.0, 1.0, 2.0});
+  expect_array(reply.values, "positions", positions);
+  expect_array(reply.values, "velocities", {0.0, 1.0, 2.0});
+}
+
+void expect_rejected(autorob::Node& node, autorob::Json::Object arguments,
+                     const std::string& name) {
+  const auto reply = call_integration(node, arguments);
+  expect(!reply.result, name + " was accepted");
+  expect(!reply.status.empty(), name + " did not provide an error status");
+}
+
+}  // namespace
+
+int main() {
+  try {
+    autorob::Node node("integration_step_test");
+
+    expect_trajectory(call_integration(node, request("1", "euler")),
+                      {0.0, 0.0, 1.0});
+    expect_trajectory(call_integration(node, request("1", "midpoint")),
+                      {0.0, 0.5, 2.0});
+    expect_trajectory(call_integration(node, request("1", "verlet")),
+                      {0.0, 0.5, 2.0});
+    expect_trajectory(call_integration(node, request("1", "rk4")),
+                      {0.0, 0.5, 2.0});
+
+    auto tangent = call_integration(node, request("tan(t)", "rk4", 0.1, 1));
+    expect(tangent.result, "tan(t), a required named function, was rejected: " + tangent.status);
+
+    auto exponent = call_integration(node, request("2^3^2", "euler", 1.0, 1));
+    expect(exponent.result, "right-associative exponentiation was rejected: " + exponent.status);
+    if (exponent.result) expect_array(exponent.values, "velocities", {0.0, 512.0});
+
+    auto unary = call_integration(node, request("-t + 1", "rk4", 0.1, 1));
+    expect(unary.result, "unary minus expression was rejected: " + unary.status);
+
+    for (const char* expression : {"", "1 2", "(", "unknown(t)", "1+"}) {
+      expect_rejected(node, request(expression, "rk4"), std::string("malformed expression '") + expression + "'");
+    }
+    expect_rejected(node, request("1", "unknown"), "unknown integrator");
+    expect_rejected(node, request("1", "rk4", 0.0), "zero dt");
+    expect_rejected(node, request("1", "rk4", 1.0, 0), "zero steps");
+
+    auto recovery = call_integration(node, request("1", "rk4"));
+    expect(recovery.result, "service did not recover after invalid requests: " + recovery.status);
+  } catch (const std::exception& error) {
+    std::cerr << "FAIL: test client error: " << error.what() << '\n';
+    return 1;
+  }
+
+  if (failures == 0) {
+    std::cout << "PASS: integration_step service accepts valid requests and rejects invalid ones\n";
+    return 0;
+  }
+  std::cerr << failures << " integration_step checks failed\n";
+  return 1;
+}
