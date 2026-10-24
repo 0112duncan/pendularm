@@ -104,6 +104,10 @@ trial.
 
 ![PID-controlled arm chasing an IK trial](asset/ik_pid_chasing_demo.gif)
 
-## How it works
+## How it is organized
 
-The C++ runtime contains the arm simulation, integrator, IK, IK action, PID, and trial nodes. These nodes communicate through the local TCP/JSON hub with a ROS like pub sub system. The browser UI displays the published state and sends commands through a small local WebSocket-to-TCP bridge; physics and control calculations remain in the C++ runtime.
+The C++ runtime contains the arm simulation, integrator, IK, IK action, PID, and
+trial nodes. These nodes communicate through the local TCP/JSON hub. The browser
+UI displays the published state and sends commands through a small local
+WebSocket-to-TCP bridge; physics and control calculations remain in the C++
+runtime.
